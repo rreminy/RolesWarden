@@ -15,7 +15,7 @@ namespace RolesWarden.Models
         public required ulong UserId { get; init; }
 
         [Column("roles_ids")]
-        public ISet<ulong>? RoleIds { get; set; }
+        public IEnumerable<ulong>? RoleIds { get; set; }
 
         [Column("timestamp")]
         public long Timestamp { get; set; }

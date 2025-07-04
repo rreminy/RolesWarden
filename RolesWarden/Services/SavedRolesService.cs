@@ -189,7 +189,7 @@ namespace RolesWarden.Services
 
             var roles = await this.GetAsync(user);
             var guildConfig = await this.GuildConfigs.GetAsync(guildId);
-            var roleConfigs = await this.RoleConfigs.GetAsync(roles.RoleIds ?? FrozenSet<ulong>.Empty, guildId);
+            var roleConfigs = await this.RoleConfigs.GetAsync(roles.RoleIds ?? [], guildId);
 
             Debug.Assert(roleConfigs.All(config => config.GuildId == guildId));
 

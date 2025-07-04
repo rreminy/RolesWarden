@@ -73,7 +73,7 @@ namespace RolesWarden.Bot
                 LogSeverity.Critical => LogLevel.Critical,
                 _ => (LogLevel)log.Severity, // ASSERT: Should never happen
             };
-            this.Logger.Log(level, "[{source}] {message}", log.Source, log.Message);
+            this.Logger.Log(level, log.Exception, "[{source}] {message}", log.Source, log.Message);
             return Task.CompletedTask;
         }
 
