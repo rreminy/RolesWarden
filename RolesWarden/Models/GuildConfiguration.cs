@@ -14,8 +14,8 @@ namespace RolesWarden.Models
         [Column("default_action")]
         public RoleAction DefaultAction { get; set; }
 
-        [Column("ignore_admin")]
-        public IgnoreAdminMode IgnoreAdmin { get; set; }
+        [Column("ignore_dangerous")]
+        public IgnoreMode IgnoreDangerous { get; set; }
 
         [Column("log_channel_id")]
         public ulong LogChannelId { get; set; }

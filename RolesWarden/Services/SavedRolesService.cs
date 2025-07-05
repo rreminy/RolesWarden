@@ -289,17 +289,17 @@ namespace RolesWarden.Services
             var guild = this.Discord.GetGuild(guildId);
             var role = await guild.GetRoleAsync(roleId, new() { CancelToken = cancellationToken });
 
-            // Is admin check
-            var isAdmin = role?.Permissions.Administrator is true; // NOTE: Do not remove null check
+            // Dangerous role check
+            var isAdmin = role?.IsDangerous() is true; // NOTE: Do not remove null check
 
             // Admin roles special cases
             if (isAdmin)
             {
                 // Special Case 1: Always ignore admin roles
-                if (guildConf.IgnoreAdmin is IgnoreAdminMode.Always) return RoleAction.Ignore;
+                if (guildConf.IgnoreDangerous is IgnoreMode.Always) return RoleAction.Ignore;
 
                 // Special Case 2: Ignore admin roles if default
-                if (roleConf.Action is RoleAction.Default && guildConf.IgnoreAdmin is IgnoreAdminMode.DefaultOnly) return RoleAction.Ignore;
+                if (roleConf.Action is RoleAction.Default && guildConf.IgnoreDangerous is IgnoreMode.DefaultOnly) return RoleAction.Ignore;
             }
 
             // Determine action to take

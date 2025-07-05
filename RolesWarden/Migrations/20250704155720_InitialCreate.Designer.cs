@@ -35,7 +35,7 @@ namespace RolesWarden.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("default_action");
 
-                    b.Property<int>("IgnoreAdmin")
+                    b.Property<int>("IgnoreDangerous")
                         .HasColumnType("integer")
                         .HasColumnName("ignore_admin");
 

@@ -32,9 +32,9 @@ namespace RolesWarden.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("default_action");
 
-                    b.Property<int>("IgnoreAdmin")
+                    b.Property<int>("IgnoreDangerous")
                         .HasColumnType("integer")
-                        .HasColumnName("ignore_admin");
+                        .HasColumnName("ignore_dangerous");
 
                     b.Property<decimal>("LogChannelId")
                         .HasColumnType("numeric(20,0)")

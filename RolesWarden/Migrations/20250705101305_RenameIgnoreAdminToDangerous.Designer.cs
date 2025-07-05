@@ -11,8 +11,8 @@ using RolesWarden.Db;
 namespace RolesWarden.Migrations
 {
     [DbContext(typeof(WardenDbContext))]
-    [Migration("20250705011126_AddGuildLogChannelColumns")]
-    partial class AddGuildLogChannelColumns
+    [Migration("20250705101305_RenameIgnoreAdminToDangerous")]
+    partial class RenameIgnoreAdminToDangerous
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -37,7 +37,7 @@ namespace RolesWarden.Migrations
 
                     b.Property<int>("IgnoreDangerous")
                         .HasColumnType("integer")
-                        .HasColumnName("ignore_admin");
+                        .HasColumnName("ignore_dangerous");
 
                     b.Property<decimal>("LogChannelId")
                         .HasColumnType("numeric(20,0)")

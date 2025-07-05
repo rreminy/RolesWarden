@@ -42,7 +42,7 @@ namespace RolesWarden.Interactions
             var action = guildConfig.DefaultAction;
             if (action is RoleAction.Default) action = RoleAction.Persist;
             embed.AddField("Default Action", action, true);
-            embed.AddField("Ignore Admin Roles", guildConfig.IgnoreAdmin, true);
+            embed.AddField("Ignore Admin Roles", guildConfig.IgnoreDangerous, true);
 
             var logText = "Not configured";
             if (guildConfig.LogChannelId is not 0)
@@ -97,7 +97,7 @@ namespace RolesWarden.Interactions
             await this.ModifyOriginalResponseAsync(message => message.Embed = embed.Build());
         }
 
-        [SlashCommand("removelog", "Remove the log channel")]
+        [SlashCommand("remove_log", "Remove the log channel")]
         public async Task RemoveLogAsync()
         {
             await this.DeferAsync();
@@ -111,7 +111,7 @@ namespace RolesWarden.Interactions
             await this.ModifyOriginalResponseAsync(message => message.Embed = embed.Build());
         }
 
-        [SlashCommand("logsaved", "Configured whether to log saved user roles")]
+        [SlashCommand("log_saved", "Configured whether to log saved user roles")]
         public async Task LogSavedAsync([Summary("enable", "Enable saved logs")] bool enable)
         {
             await this.DeferAsync();
@@ -126,7 +126,7 @@ namespace RolesWarden.Interactions
             await this.ModifyOriginalResponseAsync(message => message.Embed = embed.Build());
         }
 
-        [SlashCommand("logrestored", "Configured whether to log restored user roles")]
+        [SlashCommand("log_restored", "Configured whether to log restored user roles")]
         public async Task LogRestoredAsync([Summary("enable", "Enable restored logs")] bool enable)
         {
             await this.DeferAsync();
@@ -159,12 +159,12 @@ namespace RolesWarden.Interactions
             await this.ModifyOriginalResponseAsync(message => message.Embed = embed.Build());
         }
 
-        [SlashCommand("ignore_admin_roles", "Configure the ignore admin mode")]
-        public async Task IgnoreAdminRolesAsync(IgnoreAdminMode mode)
+        [SlashCommand("ignore_dangerous_roles", "Configure ignore dangerous role mode")]
+        public async Task IgnoreDangerousRolesAsync(IgnoreMode mode)
         {
             await this.DeferAsync();
             var config = await this.GuildConfigs.GetAsync(this.Context.Guild.Id);
-            config.IgnoreAdmin = mode;
+            config.IgnoreDangerous = mode;
             await this.GuildConfigs.SetAsync(config);
 
             var embed = WardenUtils.CreateEmbed();
@@ -195,7 +195,7 @@ namespace RolesWarden.Interactions
             await this.ModifyOriginalResponseAsync(message => message.Embed = embed.Build());
         }
 
-        [SlashCommand("resetroles", "Reset configured roles to default")]
+        [SlashCommand("reset_roles", "Reset configured roles to default")]
         public async Task ResetRolesAsync()
         {
             await this.DeferAsync();

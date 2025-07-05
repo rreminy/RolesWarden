@@ -1,6 +1,6 @@
 ﻿namespace RolesWarden.Models
 {
-    public enum IgnoreAdminMode
+    public enum IgnoreMode
     {
         /// <summary>Ignore admin roles by default.</summary>
         DefaultOnly,
