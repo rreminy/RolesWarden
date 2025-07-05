@@ -42,7 +42,7 @@ namespace RolesWarden.Interactions
             var action = guildConfig.DefaultAction;
             if (action is RoleAction.Default) action = RoleAction.Persist;
             embed.AddField("Default Action", action, true);
-            embed.AddField("Ignore Admin Roles", guildConfig.IgnoreDangerous, true);
+            embed.AddField("Ignore Dangerous Roles", guildConfig.IgnoreDangerous, true);
 
             var logText = "Not configured";
             if (guildConfig.LogChannelId is not 0)
