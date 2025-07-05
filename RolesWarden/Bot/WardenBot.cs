@@ -43,6 +43,7 @@ namespace RolesWarden.Bot
             commands.Log += this.DiscordLogHandler;
             interactions.Log += this.DiscordLogHandler;
 
+            client.Ready += this.DiscordReady;
             client.MessageReceived += this.DiscordMessageHandler;
             client.InteractionCreated += this.DiscordInteractionHandler;
 
@@ -51,6 +52,14 @@ namespace RolesWarden.Bot
             this.Interactions = interactions;
 
             CommonLog.LogConstructed(logger, this);
+        }
+
+        private async Task DiscordReady()
+        {
+            this.Logger.LogInformation("Discord Bot ready: {name}#{discriminator} ({id})", this.Client.CurrentUser.Username, this.Client.CurrentUser.Discriminator, this.Client.CurrentUser.Id);
+            var id = this.Client.CurrentUser.Id;
+            var permissions = GuildPermission.ManageRoles | GuildPermission.SendMessages | GuildPermission.EmbedLinks;
+            this.Logger.LogInformation("Bot Invite: https://discord.com/oauth2/authorize?client_id={id}&scope=bot+applications.commands&permissions={permissions}", id, (ulong)permissions);
         }
 
         private async Task InstallCommandsAndInteractions()

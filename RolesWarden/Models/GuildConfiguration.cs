@@ -17,6 +17,12 @@ namespace RolesWarden.Models
         [Column("ignore_admin")]
         public IgnoreAdminMode IgnoreAdmin { get; set; }
 
+        [Column("log_channel_id")]
+        public ulong LogChannelId { get; set; }
+
+        [Column("log_types")]
+        public GuildLogType LogTypes { get; set; }
+
         public static bool Equals(GuildConfiguration? left, GuildConfiguration? right)
         {
             if (ReferenceEquals(left, right)) return true;

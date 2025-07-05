@@ -31,7 +31,7 @@ namespace RolesWarden.Services
 
         private Task Discord_ResetGuild(SocketGuild guild)
         {
-            this.Logger.LogInformation("Removing guild configuration for {guild} ({guildId}): Bot is no longer at the server", guild.Name, guild.Id);
+            this.Logger.LogInformation("Removing guild configuration for {guild} ({guildId})", guild.Name, guild.Id);
             return this.RemoveAsync(guild);
         }
 

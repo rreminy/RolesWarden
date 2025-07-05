@@ -14,7 +14,7 @@ namespace RolesWarden.Bot
                 AlwaysDownloadDefaultStickers = false,
                 AlwaysResolveStickers = false,
                 AlwaysDownloadUsers = false,
-                GatewayIntents = GatewayIntents.GuildMembers | GatewayIntents.Guilds,
+                GatewayIntents = GatewayIntents.GuildMembers | GatewayIntents.Guilds | GatewayIntents.DirectMessages,
             };
             return new(options);
         }

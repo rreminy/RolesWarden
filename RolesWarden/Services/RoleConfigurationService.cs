@@ -43,7 +43,7 @@ namespace RolesWarden.Services
 
         private async Task Discord_ResetGuild(SocketGuild guild)
         {
-            this.Logger.LogInformation("Removing role configurations for {guild} ({guildId}): Bot is no longer at the server", guild.Name, guild.Id);
+            this.Logger.LogInformation("Removing role configurations for {guild} ({guildId})", guild.Name, guild.Id);
             await this.ClearGuildAsync(guild);
         }
 

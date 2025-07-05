@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using RolesWarden.Db;
 using RolesWarden.Models;
 using RolesWarden.Utilities;
+using System;
 using System.Collections;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -22,7 +23,7 @@ namespace RolesWarden.Services
 {
     [ExportMany]
     [SingletonReuse]
-    public sealed class SavedRolesService : IHostedService
+    public sealed partial class SavedRolesService : IHostedService
     {
         private IDbContextFactory<WardenDbContext> DbPool { get; }
         private DiscordSocketClient Discord { get; }
@@ -65,7 +66,7 @@ namespace RolesWarden.Services
 
         public async Task SetAsync(ulong guildId, ulong userId, IEnumerable<ulong> roles, CancellationToken cancellationToken = default)
         {
-            await this.SetAsync(new() { GuildId = guildId, UserId = userId, RoleIds = roles.ToHashSet() }, cancellationToken);
+            await this.SetAsync(new() { GuildId = guildId, UserId = userId, RoleIds = roles }, cancellationToken);
         }
 
         public async Task<bool> RemoveAsync(SavedRoles roles, CancellationToken cancellationToken = default)
@@ -107,6 +108,7 @@ namespace RolesWarden.Services
         public static async Task SetCoreAsync(WardenDbContext dbContext, SavedRoles roles, CancellationToken cancellationToken = default)
         {
             roles.Timestamp = TimeService.Now;
+            if (roles.RoleIds is not null && roles.RoleIds is not IList<ulong>) roles.RoleIds = roles.RoleIds.ToList();
             await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(roles, async (roles, ct) =>
             {
                 if (await dbContext.SavedRoles.ContainsAsync(roles, ct))
@@ -154,6 +156,7 @@ namespace RolesWarden.Services
             this.Discord.JoinedGuild += this.Discord_ResetGuild;
             this.Discord.UserJoined += this.RestoreRoles;
             this.Discord.GuildMemberUpdated += Discord_GuildMemberUpdated;
+            this.Discord.UserLeft += Discord_UserLeft;
             CommonLog.LogStarted(this.Logger, this);
             return Task.CompletedTask;
         }
@@ -169,15 +172,34 @@ namespace RolesWarden.Services
             return Task.CompletedTask;
         }
 
-        private async Task Discord_GuildMemberUpdated(Cacheable<SocketGuildUser, ulong> old, SocketGuildUser user)
+        private Task Discord_GuildMemberUpdated(Cacheable<SocketGuildUser, ulong> old, SocketGuildUser user)
         {
+            // Avoid saving roles if no changes are detected
             if (old.HasValue)
             {
-                var oldRoles = old.Value.Roles.ToHashSet();
-                var newRoles = user.Roles.ToHashSet();
-                if (oldRoles.SetEquals(newRoles)) return;
+                var oldRoles = old.Value.Roles.Select(role => role.Id).ToHashSet();
+                var newRoles = user.Roles.Select(role => role.Id).ToHashSet();
+                if (oldRoles.SetEquals(newRoles)) return Task.CompletedTask;
             }
-            await this.SaveRoles(user);
+            return this.SaveRoles(user);
+        }
+
+        private async Task Discord_UserLeft(SocketGuild guild, SocketUser user)
+        {
+            this.Logger.LogInformation("User {user} ({userId}) left {guild} ({guildId})", user.GlobalName, user.Id, guild.Name, guild.Id);
+
+            var guildConfig = await this.GuildConfigs.GetAsync(guild);
+            if (!guildConfig.LogTypes.HasFlag(GuildLogType.Saved)) return;
+
+            var channelId = guildConfig.LogChannelId;
+            if (channelId is 0) return;
+            
+            var channel = guild.GetTextChannel(channelId);
+            if (channel is null || !await CheckPermissionsAsync(channel)) return;
+
+            var savedRoles = await this.GetAsync(guild.Id, user.Id);
+            var embed = CreateSavedEmbed(savedRoles);
+            await channel.SendMessageAsync(embed: embed.Build());
         }
 
         private async Task RestoreRoles(SocketGuildUser user)
@@ -192,29 +214,59 @@ namespace RolesWarden.Services
             var roleConfigs = await this.RoleConfigs.GetAsync(roles.RoleIds ?? [], guildId);
 
             Debug.Assert(roleConfigs.All(config => config.GuildId == guildId));
-
+            var botUser = guild.CurrentUser;
             var success = new List<ulong>();
-            var failed = new List<ulong>();
-            var ignored = new List<ulong>();
+            var failed = new List<KeyValuePair<ulong, Exception>>();
             foreach (var roleConfig in roleConfigs)
             {
-                var action = await GetRoleActionCoreAsync(guildConfig, roleConfig);
-                if (action is RoleAction.Persist && await user.Guild.GetRoleAsync(roleConfig.RoleId) is not null)
+                try
                 {
-                    try
-                    {
-                        var roleId = roleConfig.RoleId;
-                        await user.AddRoleAsync(roleId);
-                        success.Add(roleId);
-                    }
-                    catch
-                    {
-                        failed.Add(roleConfig.RoleId);
-                    }
+                    // Ensure the role is to be persisted
+                    var action = await GetRoleActionCoreAsync(guildConfig, roleConfig);
+                    if (action is not RoleAction.Persist) continue;
+                
+                    // Ensure role exists
+                    var guildRole = await user.Guild.GetRoleAsync(roleConfig.RoleId);
+                    if (guildRole is null) continue;
+
+                    // Ensure bot has the permission to give the role
+                    var guildPermissions = botUser.GuildPermissions;
+                    if (!guildPermissions.ManageRoles) continue;
+
+                    // Ensure the role position is below the bot's highest role.
+                    // NOTE: Highest role doesn't need the permission.
+                    var highestPosition = botUser.Roles.Select(role => role.Position).Min();
+                    var rolePosition = guildRole.Position;
+                    if (rolePosition <= highestPosition) continue;
+
+                    // Attempt giving the role to the user and record success.
+                    var roleId = roleConfig.RoleId;
+                    await user.AddRoleAsync(roleId);
+                    success.Add(roleId);
                 }
-                else ignored.Add(roleConfig.RoleId);
+                catch (Exception ex)
+                {
+                    // Record the failure to give the role to the user.
+                    failed.Add(KeyValuePair.Create(roleConfig.RoleId, ex));
+
+                    // The above means this should not happen, log this for later debugging.
+                    this.Logger.LogError(ex, "Failed to give {roleId} to {user} ({userId}) at {guild} ({guildId})", roleConfig.RoleId, user.DisplayName, userId, guild.Name, guildId);
+                }
             }
-            this.Logger.LogInformation("User {user} ({userId}) at {guild} ({guildId}) roles restored (Success: {success} | Ignored: {ignored} | Failed: {failed})", user.DisplayName, userId, guild.Name, guildId, string.Join(", ", success), string.Join(", ", ignored), string.Join(", ", failed));
+
+            // Log feedback
+            this.Logger.LogInformation("User {user} ({userId}) at {guild} ({guildId}) roles restored (Success: {success} | Failed: {failed})", user.DisplayName, userId, guild.Name, guildId, success.Count, failed.Count);
+
+            if (!guildConfig.LogTypes.HasFlag(GuildLogType.Restored)) return;
+
+            var channelId = guildConfig.LogChannelId;
+            if (channelId is 0) return;
+
+            var channel = guild.GetTextChannel(channelId);
+            if (channel is null || !await CheckPermissionsAsync(channel)) return;
+
+            var embed = CreateRestoredEmbed(userId, success, failed);
+            await channel.SendMessageAsync(embed: embed.Build());
         }
 
         private async Task SaveRoles(SocketGuildUser user)
@@ -223,7 +275,7 @@ namespace RolesWarden.Services
             var guild = user.Guild;
             var guildId = guild.Id;
             this.Logger.LogInformation("User {user} ({userId}) at {guild} ({guildId}) roles updated", user.DisplayName, userId, guild.Name, guildId);
-            await this.SetAsync(new() { GuildId = guildId, UserId = userId, RoleIds = user.Roles.Select(role => role.Id).ToHashSet() });
+            await this.SetAsync(new() { GuildId = guildId, UserId = userId, RoleIds = user.Roles.Select(role => role.Id) });
         }
 
         public async Task<RoleAction> GetRoleActionCoreAsync(GuildConfiguration guildConf, RoleConfiguration roleConf, CancellationToken cancellationToken = default)
