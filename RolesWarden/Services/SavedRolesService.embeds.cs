@@ -33,12 +33,13 @@ namespace RolesWarden.Services
                 .WithTitle("User roles restored");
 
             embed.AddField("User", $"<@{userId}>", true);
-            embed.AddField("Roles", string.Join(", ", restored.Select(roleId => $"<@&{roleId}>")), false);
+
+            var restoredText = restored.Count > 0 ? string.Join(", ", restored.Select(roleId => $"<@&{roleId}>")) : "No roles restored";
+            embed.AddField("Roles", restoredText, false);
 
             if (failed.Count > 0)
             {
-                var failedText = string.Join("\n", failed.Select(failed => $"<@&{failed.Key}> - {failed.Value.Message}"));
-                embed.AddField("Failed", $"```\n{failedText}\n```", false);
+                embed.AddField("Failed", string.Join("\n", failed.Select(failed => $"<@&{failed.Key}> - {failed.Value.Message}")), false);
             }
             return embed;
         }

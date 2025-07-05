@@ -225,9 +225,9 @@ namespace RolesWarden.Services
                     var action = await GetRoleActionCoreAsync(guildConfig, roleConfig);
                     if (action is not RoleAction.Persist) continue;
                 
-                    // Ensure role exists
+                    // Ensure role exists and is not managed
                     var guildRole = await user.Guild.GetRoleAsync(roleConfig.RoleId);
-                    if (guildRole is null) continue;
+                    if (guildRole is null || guildRole.IsManaged) continue;
 
                     // Ensure bot has the permission to give the role
                     var guildPermissions = botUser.GuildPermissions;
@@ -235,9 +235,9 @@ namespace RolesWarden.Services
 
                     // Ensure the role position is below the bot's highest role.
                     // NOTE: Highest role doesn't need the permission.
-                    var highestPosition = botUser.Roles.Select(role => role.Position).Min();
+                    var highestPosition = botUser.Roles.Where(role => role.Id != guildId).Select(role => role.Position).Max();
                     var rolePosition = guildRole.Position;
-                    if (rolePosition <= highestPosition) continue;
+                    if (rolePosition >= highestPosition) continue;
 
                     // Attempt giving the role to the user and record success.
                     var roleId = roleConfig.RoleId;
@@ -275,7 +275,7 @@ namespace RolesWarden.Services
             var guild = user.Guild;
             var guildId = guild.Id;
             this.Logger.LogInformation("User {user} ({userId}) at {guild} ({guildId}) roles updated", user.DisplayName, userId, guild.Name, guildId);
-            await this.SetAsync(new() { GuildId = guildId, UserId = userId, RoleIds = user.Roles.Select(role => role.Id) });
+            await this.SetAsync(new() { GuildId = guildId, UserId = userId, RoleIds = user.Roles.Select(role => role.Id).Where(roleId => roleId != guildId) });
         }
 
         public async Task<RoleAction> GetRoleActionCoreAsync(GuildConfiguration guildConf, RoleConfiguration roleConf, CancellationToken cancellationToken = default)

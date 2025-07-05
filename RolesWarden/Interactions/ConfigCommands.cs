@@ -3,6 +3,8 @@ using Discord.Interactions;
 using RolesWarden.Models;
 using RolesWarden.Services;
 using RolesWarden.Utilities;
+using System;
+using System.Data;
 using System.Linq;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -136,6 +138,38 @@ namespace RolesWarden.Interactions
             var embed = WardenUtils.CreateEmbed();
             embed.Color = Color.Green;
             embed.Description = enable ? "Restored roles will now be logged" : "Restored roles will no longer be logged";
+            await this.ModifyOriginalResponseAsync(message => message.Embed = embed.Build());
+        }
+
+        [SlashCommand("default_action", "Configure default action to take for unconfigured roles")]
+        public async Task DefaultActionAsync([Summary("action", "Default action to take. \"Default\" is \"Persist\".")] RoleAction action)
+        {
+            await this.DeferAsync();
+            var config = await this.GuildConfigs.GetAsync(this.Context.Guild.Id);
+            config.DefaultAction = action;
+            await this.GuildConfigs.SetAsync(config);
+
+            // Default is persist... although stored as default,
+            // show the actual effective default to the user.
+            if (action is RoleAction.Default) action = RoleAction.Persist;
+
+            var embed = WardenUtils.CreateEmbed();
+            embed.Color = Color.Green;
+            embed.Description = $"Default action is now set to **{action}**";
+            await this.ModifyOriginalResponseAsync(message => message.Embed = embed.Build());
+        }
+
+        [SlashCommand("ignore_admin_roles", "Configure the ignore admin mode")]
+        public async Task IgnoreAdminRolesAsync(IgnoreAdminMode mode)
+        {
+            await this.DeferAsync();
+            var config = await this.GuildConfigs.GetAsync(this.Context.Guild.Id);
+            config.IgnoreAdmin = mode;
+            await this.GuildConfigs.SetAsync(config);
+
+            var embed = WardenUtils.CreateEmbed();
+            embed.Color = Color.Green;
+            embed.Description = $"Ignore admin roles is now set to **{mode}**";
             await this.ModifyOriginalResponseAsync(message => message.Embed = embed.Build());
         }
 
