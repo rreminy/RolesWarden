@@ -54,7 +54,7 @@ namespace RolesWarden.Interactions
                 }
                 else
                 {
-                    logText = "❌ {channel.Mention}";
+                    logText = $"❌ {channel?.Mention}";
                 }
             }
             embed.AddField("Log Channel", logText, true);
