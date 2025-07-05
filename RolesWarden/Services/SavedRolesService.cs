@@ -273,8 +273,11 @@ namespace RolesWarden.Services
                 var channel = guild.GetTextChannel(channelId);
                 if (channel is null || !await CheckPermissionsAsync(channel)) return;
 
-                var embed = CreateRestoredEmbed(userId, success, failed);
-                await channel.SendMessageAsync(embed: embed.Build());
+                if (success.Count + failed.Count > 0)
+                {
+                    var embed = CreateRestoredEmbed(userId, success, failed);
+                    await channel.SendMessageAsync(embed: embed.Build());
+                }
             }
             finally
             {
