@@ -25,6 +25,8 @@ namespace RolesWarden.Services
     [SingletonReuse]
     public sealed partial class SavedRolesService : IHostedService
     {
+        private readonly HashSet<ulong> _restoringUsers = [];
+        
         private IDbContextFactory<WardenDbContext> DbPool { get; }
         private DiscordSocketClient Discord { get; }
         private RoleConfigurationService RoleConfigs { get; }
@@ -209,64 +211,76 @@ namespace RolesWarden.Services
             var guildId = guild.Id;
             this.Logger.LogInformation("User {user} ({userId}) joined {guild} ({guildId}), restoring roles", user.DisplayName, userId, guild.Name, guildId);
 
-            var roles = await this.GetAsync(user);
-            var guildConfig = await this.GuildConfigs.GetAsync(guildId);
-            var roleConfigs = await this.RoleConfigs.GetAsync(roles.RoleIds ?? [], guildId);
-
-            Debug.Assert(roleConfigs.All(config => config.GuildId == guildId));
-            var botUser = guild.CurrentUser;
-            var success = new List<ulong>();
-            var failed = new List<KeyValuePair<ulong, Exception>>();
-            foreach (var roleConfig in roleConfigs)
+            lock (this._restoringUsers)
             {
-                try
-                {
-                    // Ensure the role is to be persisted
-                    var action = await GetRoleActionCoreAsync(guildConfig, roleConfig);
-                    if (action is not RoleAction.Persist) continue;
-                
-                    // Ensure role exists and is not managed
-                    var guildRole = await user.Guild.GetRoleAsync(roleConfig.RoleId);
-                    if (guildRole is null || guildRole.IsManaged) continue;
-
-                    // Ensure bot has the permission to give the role
-                    var guildPermissions = botUser.GuildPermissions;
-                    if (!guildPermissions.ManageRoles) continue;
-
-                    // Ensure the role position is below the bot's highest role.
-                    // NOTE: Highest role doesn't need the permission.
-                    var highestPosition = botUser.Roles.Where(role => role.Id != guildId).Select(role => role.Position).Max();
-                    var rolePosition = guildRole.Position;
-                    if (rolePosition >= highestPosition) continue;
-
-                    // Attempt giving the role to the user and record success.
-                    var roleId = roleConfig.RoleId;
-                    await user.AddRoleAsync(roleId);
-                    success.Add(roleId);
-                }
-                catch (Exception ex)
-                {
-                    // Record the failure to give the role to the user.
-                    failed.Add(KeyValuePair.Create(roleConfig.RoleId, ex));
-
-                    // The above means this should not happen, log this for later debugging.
-                    this.Logger.LogError(ex, "Failed to give {roleId} to {user} ({userId}) at {guild} ({guildId})", roleConfig.RoleId, user.DisplayName, userId, guild.Name, guildId);
-                }
+                if (!this._restoringUsers.Add(userId)) return;
             }
+            try
+            {
+                var roles = await this.GetAsync(user);
+                var guildConfig = await this.GuildConfigs.GetAsync(guildId);
+                var roleConfigs = await this.RoleConfigs.GetAsync(roles.RoleIds ?? [], guildId);
 
-            // Log feedback
-            this.Logger.LogInformation("User {user} ({userId}) at {guild} ({guildId}) roles restored (Success: {success} | Failed: {failed})", user.DisplayName, userId, guild.Name, guildId, success.Count, failed.Count);
+                Debug.Assert(roleConfigs.All(config => config.GuildId == guildId));
+                var botUser = guild.CurrentUser;
+                var success = new List<ulong>();
+                var failed = new List<KeyValuePair<ulong, Exception>>();
+                foreach (var roleConfig in roleConfigs)
+                {
+                    try
+                    {
+                        // Ensure the role is to be persisted
+                        var action = await GetRoleActionCoreAsync(guildConfig, roleConfig);
+                        if (action is not RoleAction.Persist) continue;
 
-            if (!guildConfig.LogTypes.HasFlag(GuildLogType.Restored)) return;
+                        // Ensure role exists and is not managed
+                        var guildRole = await user.Guild.GetRoleAsync(roleConfig.RoleId);
+                        if (guildRole is null || guildRole.IsManaged) continue;
 
-            var channelId = guildConfig.LogChannelId;
-            if (channelId is 0) return;
+                        // Ensure bot has the permission to give the role
+                        var guildPermissions = botUser.GuildPermissions;
+                        if (!guildPermissions.ManageRoles) continue;
 
-            var channel = guild.GetTextChannel(channelId);
-            if (channel is null || !await CheckPermissionsAsync(channel)) return;
+                        // Ensure the role position is below the bot's highest role.
+                        // NOTE: Highest role doesn't need the permission.
+                        var highestPosition = botUser.Roles.Where(role => role.Id != guildId).Select(role => role.Position).Max();
+                        var rolePosition = guildRole.Position;
+                        if (rolePosition >= highestPosition) continue;
 
-            var embed = CreateRestoredEmbed(userId, success, failed);
-            await channel.SendMessageAsync(embed: embed.Build());
+                        // Attempt giving the role to the user and record success.
+                        var roleId = roleConfig.RoleId;
+                        await user.AddRoleAsync(roleId);
+                        success.Add(roleId);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Record the failure to give the role to the user.
+                        failed.Add(KeyValuePair.Create(roleConfig.RoleId, ex));
+
+                        // The above means this should not happen, log this for later debugging.
+                        this.Logger.LogError(ex, "Failed to give {roleId} to {user} ({userId}) at {guild} ({guildId})", roleConfig.RoleId, user.DisplayName, userId, guild.Name, guildId);
+                    }
+                }
+
+                // Log feedback
+                this.Logger.LogInformation("User {user} ({userId}) at {guild} ({guildId}) roles restored (Success: {success} | Failed: {failed})", user.DisplayName, userId, guild.Name, guildId, success.Count, failed.Count);
+
+                if (!guildConfig.LogTypes.HasFlag(GuildLogType.Restored)) return;
+
+                var channelId = guildConfig.LogChannelId;
+                if (channelId is 0) return;
+
+                var channel = guild.GetTextChannel(channelId);
+                if (channel is null || !await CheckPermissionsAsync(channel)) return;
+
+                var embed = CreateRestoredEmbed(userId, success, failed);
+                await channel.SendMessageAsync(embed: embed.Build());
+            }
+            finally
+            {
+                lock (this._restoringUsers) this._restoringUsers.Remove(userId);
+            }
+            await this.SaveRoles(user);
         }
 
         private async Task SaveRoles(SocketGuildUser user)
@@ -274,6 +288,11 @@ namespace RolesWarden.Services
             var userId = user.Id;
             var guild = user.Guild;
             var guildId = guild.Id;
+            lock (this._restoringUsers)
+            {
+                // Avoid users being restored
+                if (this._restoringUsers.Contains(userId)) return;
+            }
             this.Logger.LogInformation("User {user} ({userId}) at {guild} ({guildId}) roles updated", user.DisplayName, userId, guild.Name, guildId);
             await this.SetAsync(new() { GuildId = guildId, UserId = userId, RoleIds = user.Roles.Select(role => role.Id).Where(roleId => roleId != guildId) });
         }
