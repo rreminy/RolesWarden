@@ -176,13 +176,6 @@ namespace RolesWarden.Services
 
         private Task Discord_GuildMemberUpdated(Cacheable<SocketGuildUser, ulong> old, SocketGuildUser user)
         {
-            // Avoid saving roles if no changes are detected
-            if (old.HasValue)
-            {
-                var oldRoles = old.Value.Roles.Select(role => role.Id).ToHashSet();
-                var newRoles = user.Roles.Select(role => role.Id).ToHashSet();
-                if (oldRoles.SetEquals(newRoles)) return Task.CompletedTask;
-            }
             return this.SaveRoles(user);
         }
 
